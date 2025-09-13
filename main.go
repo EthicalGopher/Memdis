@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/EthicalGopher/Memdis/core"
-	"github.com/EthicalGopher/Memdis/persistence"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/EthicalGopher/Memdis/core"
+	"github.com/EthicalGopher/Memdis/persistence"
 )
 
 func main() {
@@ -19,7 +20,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create WAL: %v", err)
 	}
-	defer wal.Close()
+	defer func() {
+		if err := wal.Close(); err != nil {
+			log.Printf("Failed to close WAL: %v", err)
+		}
+	}()
 
 	// Initialize engine
 	engine := core.NewEngine()
@@ -36,6 +41,8 @@ func main() {
 	fmt.Println("  FIND <collection> [filter_json]")
 	fmt.Println("  UPDATE <collection> <filter_json> <update_json>")
 	fmt.Println("  DELETE <collection> <filter_json>")
+	fmt.Println("  COUNT <collection> [filter_json]")
+	fmt.Println("  SORT <collection> <sort_key>")
 	fmt.Println("  LIST_COLLECTIONS")
 	fmt.Println("  EXIT")
 	fmt.Println("---")
@@ -153,20 +160,43 @@ func main() {
 			fmt.Printf("✅ Documents deleted from '%s'\n", collection)
 
 		case "COUNT":
-			if len(parts) < 3 {
-				fmt.Println("❌ Usage: Count <collection> <filter_json>")
+			if len(parts) < 2 {
+				fmt.Println("❌ Usage: COUNT <collection> [filter_json]")
 				continue
 			}
-			collection, filterJson := parts[1], parts[2]
+			collection := parts[1]
+			var filter core.Document
 
-			count := core.Count(collection, filterJson)
+			if len(parts) >= 3 {
+				if err := json.Unmarshal([]byte(parts[2]), &filter); err != nil {
+					fmt.Printf("❌ Invalid filter JSON: %v\n", err)
+					continue
+				}
+			}
+
+			count := engine.Count(collection, filter)
 			fmt.Printf("Number of items inside %s : %d\n", collection, count)
-
+		case "SORT":
+			if len(parts) < 3 {
+				fmt.Println("❌ Usage: SORT <collection> <sort_key>")
+				continue
+			}
+			collection, key := parts[1], parts[2]
+			docs := engine.Sort(collection, key)
+			if len(docs) == 0 {
+				fmt.Println("📭 No documents found")
+				continue
+			}
+			for i, doc := range docs {
+				jsonBytes, _ := json.MarshalIndent(doc, "  ", "  ")
+				fmt.Printf("%d: %s\n", i+1, string(jsonBytes))
+			}
 		case "LIST_COLLECTIONS":
 			// This would need to be implemented in the engine
 			fmt.Println("📊 Collections feature coming soon!")
 
 		case "EXIT", "QUIT":
+			fmt.Println(engine)
 			fmt.Println("👋 Goodbye!")
 			return
 

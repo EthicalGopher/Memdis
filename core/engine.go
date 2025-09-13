@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -98,17 +99,77 @@ func (e *Engine) Find(collectionName string, filter Document) []Document {
 func (e *Engine) Count(collectionName string, filter Document) int {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	count := 0
-	collection, exits := e.collections[collectionName]
-	if exits {
-		return count
+	collection, exists := e.collections[collectionName]
+	if !exists {
+		return 0
 	}
+	if len(filter) == 0 {
+		return len(collection)
+	}
+	count := 0
 	for _, doc := range collection {
 		if matchesFilter(doc, filter) {
 			count++
 		}
 	}
 	return count
+}
+
+// Sort documents in a collection by a specific key
+func (e *Engine) Sort(collectionName string, sortKey string) []Document {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	collection, exists := e.collections[collectionName]
+	if !exists {
+		return []Document{}
+	}
+
+	// Convert map to slice for sorting
+	docs := make([]Document, 0, len(collection))
+	for _, doc := range collection {
+		docs = append(docs, doc)
+	}
+
+	// Sort the slice based on the sortKey
+	sort.Slice(docs, func(i, j int) bool {
+		valI, iExists := docs[i][sortKey]
+		valJ, jExists := docs[j][sortKey]
+
+		// Documents with the key missing will be at the end
+		if !iExists {
+			return false
+		}
+		if !jExists {
+			return true
+		}
+
+		// Type switch to handle different data types
+		switch vI := valI.(type) {
+		case float64: // JSON numbers are decoded as float64
+			if vJ, ok := valJ.(float64); ok {
+				return vI < vJ
+			}
+		case string:
+			if vJ, ok := valJ.(string); ok {
+				return vI < vJ
+			}
+		case int:
+			if vJ, ok := valJ.(int); ok {
+				return vI < vJ
+			}
+		}
+		// Default case if types are different or not sortable
+		return false
+	})
+
+	return docs
+}
+
+func (e *Engine) Append(collectionName string, filter Document, data Document) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	
 }
 
 // Helper function to check if document matches filter

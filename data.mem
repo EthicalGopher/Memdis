@@ -1,2 +1,5 @@
 {"Op":"insert","Collection":"test","Data":{"name":"Ayush"},"Filter":null,"ID":""}
 {"Op":"insert","Collection":"hello","Data":{"name":"Sankhya"},"Filter":null,"ID":""}
+{"Op":"update","Collection":"test","Data":{"name":"Ayush","roll_num":90},"Filter":{"name":"Ayush"},"ID":""}
+{"Op":"insert","Collection":"test","Data":{"name":"Rahul"},"Filter":null,"ID":""}
+{"Op":"update","Collection":"test","Data":{"name":"Rahul","roll_num":3},"Filter":{"name":"Rahul"},"ID":""}
