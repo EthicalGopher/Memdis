@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/EthicalGopher/Memdis/Mem"
 	"github.com/EthicalGopher/Memdis/core"
 )
 
@@ -12,7 +13,7 @@ type Data struct {
 
 func main() {
 
-	DB, err := Connect("data.mem")
+	DB, err := Mem.Connect("data.mem")
 	if err != nil {
 		fmt.Println(err)
 	}

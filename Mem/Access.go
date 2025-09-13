@@ -1,4 +1,4 @@
-package Memdis
+package Mem
 
 import (
 	"encoding/json"
