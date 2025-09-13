@@ -45,10 +45,11 @@ func (e *Engine) ApplyCommand(cmd Command) {
 
 	switch cmd.Op {
 	case "insert":
-		// Generate ID if not provided
+		// The ID should now be pre-generated, but we keep this for compatibility
+		// with old WAL entries that might still be processed.
 		id := cmd.ID
 		if id == "" {
-			id = generateID() // Simple ID generator
+			id = GenerateID() // This was the source of the non-deterministic restore
 		}
 		collection[id] = cmd.Data
 		// Add the _id field to the document
@@ -166,12 +167,6 @@ func (e *Engine) Sort(collectionName string, sortKey string) []Document {
 	return docs
 }
 
-func (e *Engine) Append(collectionName string, filter Document, data Document) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	
-}
-
 // Helper function to check if document matches filter
 func matchesFilter(doc Document, filter Document) bool {
 	if len(filter) == 0 {
@@ -187,8 +182,10 @@ func matchesFilter(doc Document, filter Document) bool {
 	return true
 }
 
-// Simple ID generator
-func generateID() string {
-	// In real implementation, use UUID or better ID generation
+// GenerateID creates a new unique ID.
+// It's exported so the access layer can pre-generate IDs before logging.
+func GenerateID() string {
+	// In a real-world scenario, a more robust UUID library would be better
+	// to guarantee uniqueness across machines and time.
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
