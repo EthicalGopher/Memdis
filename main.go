@@ -25,7 +25,7 @@ func main() {
 	}()
 
 	data := Data{
-		Name: "Ayush",
+		Name: "Ayushi",
 	}
 	_, err = json.Marshal(data)
 	if err != nil {

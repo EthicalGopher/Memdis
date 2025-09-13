@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -45,21 +46,16 @@ func (e *Engine) ApplyCommand(cmd Command) {
 
 	switch cmd.Op {
 	case "insert":
-		// The ID should now be pre-generated, but we keep this for compatibility
-		// with old WAL entries that might still be processed.
 		id := cmd.ID
 		if id == "" {
-			id = GenerateID() // This was the source of the non-deterministic restore
+			id = GenerateID()
 		}
 		collection[id] = cmd.Data
-		// Add the _id field to the document
 		collection[id]["_id"] = id
 
 	case "update":
-		// Simple implementation: update all documents that match filter
 		for id, doc := range collection {
 			if matchesFilter(doc, cmd.Filter) {
-				// Merge existing document with update data
 				for k, v := range cmd.Data {
 					doc[k] = v
 				}
@@ -68,13 +64,31 @@ func (e *Engine) ApplyCommand(cmd Command) {
 		}
 
 	case "delete":
-		// Remove documents that match filter
 		for id, doc := range collection {
 			if matchesFilter(doc, cmd.Filter) {
 				delete(collection, id)
 			}
 		}
 	}
+}
+
+// Serialize converts the entire engine state into a byte slice for snapshotting.
+func (e *Engine) Serialize() ([]byte, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return json.Marshal(e.collections)
+}
+
+// Deserialize populates the engine from a byte slice when loading a snapshot.
+func (e *Engine) Deserialize(data []byte) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var collections map[string]map[string]Document
+	if err := json.Unmarshal(data, &collections); err != nil {
+		return err
+	}
+	e.collections = collections
+	return nil
 }
 
 // Find documents in a collection
@@ -126,18 +140,15 @@ func (e *Engine) Sort(collectionName string, sortKey string) []Document {
 		return []Document{}
 	}
 
-	// Convert map to slice for sorting
 	docs := make([]Document, 0, len(collection))
 	for _, doc := range collection {
 		docs = append(docs, doc)
 	}
 
-	// Sort the slice based on the sortKey
 	sort.Slice(docs, func(i, j int) bool {
 		valI, iExists := docs[i][sortKey]
 		valJ, jExists := docs[j][sortKey]
 
-		// Documents with the key missing will be at the end
 		if !iExists {
 			return false
 		}
@@ -145,9 +156,8 @@ func (e *Engine) Sort(collectionName string, sortKey string) []Document {
 			return true
 		}
 
-		// Type switch to handle different data types
 		switch vI := valI.(type) {
-		case float64: // JSON numbers are decoded as float64
+		case float64:
 			if vJ, ok := valJ.(float64); ok {
 				return vI < vJ
 			}
@@ -160,7 +170,6 @@ func (e *Engine) Sort(collectionName string, sortKey string) []Document {
 				return vI < vJ
 			}
 		}
-		// Default case if types are different or not sortable
 		return false
 	})
 
@@ -170,7 +179,7 @@ func (e *Engine) Sort(collectionName string, sortKey string) []Document {
 // Helper function to check if document matches filter
 func matchesFilter(doc Document, filter Document) bool {
 	if len(filter) == 0 {
-		return true // No filter means match all
+		return true
 	}
 
 	for key, filterValue := range filter {
@@ -183,9 +192,6 @@ func matchesFilter(doc Document, filter Document) bool {
 }
 
 // GenerateID creates a new unique ID.
-// It's exported so the access layer can pre-generate IDs before logging.
 func GenerateID() string {
-	// In a real-world scenario, a more robust UUID library would be better
-	// to guarantee uniqueness across machines and time.
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }

@@ -16,26 +16,19 @@ type DB struct {
 	wal    *persistence.WAL
 }
 
-// NewDB initializes and returns a new database instance.
-// It creates the engine, sets up the WAL, and restores state from the log.
+// Connect initializes and returns a new database instance.
 func Connect(filePath string) (*DB, error) {
 	fmt.Println("🚀 Initializing DocStore...")
 
-	// Initialize persistence (Write-Ahead Log)
 	wal, err := persistence.NewWAL(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create WAL: %w", err)
 	}
 
-	// Initialize the core storage engine
 	engine := core.NewEngine()
 
-	// Restore state from the WAL. This is critical for persistence.
 	if err := wal.Restore(engine); err != nil {
-		// This is often not a fatal error, just means we're starting fresh.
 		log.Printf("Note: Starting with a fresh database: %v", err)
-	} else {
-		fmt.Println("✅ Database state restored from log.")
 	}
 
 	return &DB{
@@ -44,24 +37,24 @@ func Connect(filePath string) (*DB, error) {
 	}, nil
 }
 
-// Close gracefully shuts down the database, ensuring the WAL is closed.
+// Close gracefully shuts down the database.
 func (db *DB) Close() error {
 	fmt.Println("👋 Shutting down database...")
 	return db.wal.Close()
 }
 
-// Execute parses and runs a single command against the database.
-// It returns the result of the command (e.g., found documents, count) or an error.
+// Execute parses and runs a single command.
 func (db *DB) Execute(commandStr string) (any, error) {
 	input := strings.TrimSpace(commandStr)
 	if input == "" {
-		return nil, nil // No command is a no-op, not an error.
+		return nil, nil
 	}
 
 	parts := strings.SplitN(input, " ", 4)
 	command := strings.ToUpper(parts[0])
 
 	switch command {
+	// ... (INSERT, FIND, UPDATE, DELETE, COUNT, SORT cases remain the same) ...
 	case "INSERT":
 		if len(parts) < 3 {
 			return nil, fmt.Errorf("❌ usage: INSERT <collection> <json_data>")
@@ -73,12 +66,8 @@ func (db *DB) Execute(commandStr string) (any, error) {
 			return nil, fmt.Errorf("❌ invalid JSON: %w", err)
 		}
 
-		// --- CRITICAL FIX ---
-		// Generate the ID *before* writing to the WAL. This makes the operation
-		// deterministic and ensures the restore process is reliable.
 		id := core.GenerateID()
 		cmd := core.Command{Op: "insert", Collection: collection, Data: data, ID: id}
-		// --- END FIX ---
 
 		if err := db.wal.Write(cmd); err != nil {
 			return nil, fmt.Errorf("❌ failed to persist command: %w", err)
@@ -101,7 +90,7 @@ func (db *DB) Execute(commandStr string) (any, error) {
 		}
 
 		results := db.engine.Find(collection, filter)
-		return results, nil // Return the slice of documents
+		return results, nil
 
 	case "UPDATE":
 		if len(parts) < 4 {
@@ -158,7 +147,7 @@ func (db *DB) Execute(commandStr string) (any, error) {
 		}
 
 		count := db.engine.Count(collection, filter)
-		return count, nil // Return the integer count
+		return count, nil
 
 	case "SORT":
 		if len(parts) < 3 {
@@ -166,13 +155,30 @@ func (db *DB) Execute(commandStr string) (any, error) {
 		}
 		collection, key := parts[1], parts[2]
 		docs := db.engine.Sort(collection, key)
-		return docs, nil // Return the sorted slice of documents
+		return docs, nil
+
+	case "SAVE":
+		log.Println("⚙️ Starting database snapshot...")
+
+		// 1. Save the current engine state to the snapshot file.
+		if err := db.wal.SaveSnapshot(db.engine); err != nil {
+			return nil, fmt.Errorf("❌ snapshot failed: %w", err)
+		}
+
+		// 2. If snapshot is successful, truncate the WAL.
+		if err := db.wal.Truncate(); err != nil {
+			// This is non-fatal for the user, but should be logged.
+			// The next snapshot will just have to cover more data.
+			log.Printf("⚠️ Warning: snapshot successful, but failed to truncate WAL: %v", err)
+		}
+
+		log.Println("✅ Snapshot created successfully.")
+		return "✅ Snapshot created successfully.", nil
 
 	case "LIST_COLLECTIONS":
 		return "📊 Collections feature coming soon!", nil
 
 	case "EXIT", "QUIT":
-		// The caller should handle this command to exit its own loop.
 		return "Command 'QUIT' received.", nil
 
 	default:
