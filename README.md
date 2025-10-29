@@ -147,3 +147,140 @@ Lists all available collections in the database.
     ```bash
     ./Memdis list-collections
     ```
+
+## Using Memdis as a Go Package
+
+You can integrate Memdis directly into your Go applications as a library. This allows you to programmatically interact with the database without using the CLI.
+
+### 1. Import the Package
+
+First, ensure you have the Memdis package imported in your Go project:
+
+```go
+import (
+    "fmt"
+    "log"
+    "github.com/EthicalGopher/Memdis/Mem" // Adjust import path if necessary
+    "github.com/EthicalGopher/Memdis/core"
+)
+```
+
+### 2. Connect to the Database
+
+Initialize a database connection using `Mem.Connect`. You need to provide a file path for the Write-Ahead Log (WAL).
+
+```go
+db, err := Mem.Connect("my_database.mem")
+if err != nil {
+    log.Fatalf("Failed to connect to database: %v", err)
+}
+deffer db.Close() // Ensure the database connection is closed when your application exits
+```
+
+### 3. Execute Commands
+
+You can execute any database command using the `db.Execute()` method. This method takes a command string (similar to the CLI commands) and returns the result and an error, if any.
+
+#### Example: Inserting a Document
+
+```go
+insertCmd := `INSERT users {"name":"Bob", "email":"bob@example.com"}`
+result, err := db.Execute(insertCmd)
+if err != nil {
+    fmt.Printf("Error inserting document: %v\n", err)
+} else {
+    fmt.Printf("Insert result: %v\n", result)
+}
+```
+
+#### Example: Finding Documents
+
+```go
+findCmd := `FIND users {"name":"Bob"}`
+result, err = db.Execute(findCmd)
+if err != nil {
+    fmt.Printf("Error finding documents: %v\n", err)
+} else {
+    // The result for FIND operations is typically a slice of core.Document
+    if docs, ok := result.([]core.Document); ok {
+        for _, doc := range docs {
+            fmt.Printf("Found document: %+v\n", doc)
+        }
+    } else {
+        fmt.Printf("Find result: %v\n", result)
+    }
+}
+```
+
+### Full Example
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/EthicalGopher/Memdis/Mem"
+	"github.com/EthicalGopher/Memdis/core"
+)
+
+func main() {
+	// 1. Connect to the database
+	db, err := Mem.Connect("my_application_data.mem")
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close() // Ensure the database connection is closed
+
+	// 2. Insert a document
+	insertCmd := `INSERT products {"name":"Laptop", "price":1200.00, "inStock":true}`
+	insertResult, err := db.Execute(insertCmd)
+	if err != nil {
+		fmt.Printf("Error inserting document: %v\n", err)
+	} else {
+		fmt.Printf("Insert result: %v\n", insertResult)
+	}
+
+	// 3. Find documents
+	findCmd := `FIND products {"inStock":true}`
+	findResult, err := db.Execute(findCmd)
+	if err != nil {
+		fmt.Printf("Error finding documents: %v\n", err)
+	} else {
+		if docs, ok := findResult.([]core.Document); ok {
+			fmt.Println("\nFound products:")
+			for _, doc := range docs {
+				fmt.Printf("- %+v\n", doc)
+			}
+		} else {
+			fmt.Printf("Find result: %v\n", findResult)
+		}
+	}
+
+	// 4. Update a document
+	updateCmd := `UPDATE products {"name":"Laptop"} {"price":1150.00}`
+	updateResult, err := db.Execute(updateCmd)
+	if err != nil {
+		fmt.Printf("Error updating document: %v\n", err)
+	} else {
+		fmt.Printf("\nUpdate result: %v\n", updateResult)
+	}
+
+	// 5. Count documents
+	countCmd := `COUNT products {"inStock":true}`
+	countResult, err := db.Execute(countCmd)
+	if err != nil {
+		fmt.Printf("Error counting documents: %v\n", err)
+	} else {
+		fmt.Printf("\nCount of in-stock products: %v\n", countResult)
+	}
+
+	// 6. Save snapshot
+	saveResult, err := db.Execute("SAVE")
+	if err != nil {
+		fmt.Printf("Error saving snapshot: %v\n", err)
+	} else {
+		fmt.Printf("\nSave result: %v\n", saveResult)
+	}
+}
